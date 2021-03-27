@@ -178,6 +178,7 @@ select_t select_page{0}, select_file{0}, select_print{0}, select_prepare{0}
          , select_jerk{0}
          , select_step{0}
          , select_LevelMenu{0}
+         , select_LevelMenuEditMesh{0}
          ;
 
 uint8_t index_file     = MROWS,
@@ -1919,45 +1920,6 @@ inline void Draw_Print_File_Menu() {
 
 #ifdef AUTO_BED_LEVELING_UBL
 
-/* Level Menu */
-void HMI_Level_Menu() {
-    ENCODER_DiffState encoder_diffState = get_encoder_state();
-    if (encoder_diffState == ENCODER_DIFF_NO) return;
-    if (encoder_diffState == ENCODER_DIFF_CW) {
-        if (select_LevelMenu.inc(5)) Move_Highlight(1, select_LevelMenu.now);
-    }
-    else if (encoder_diffState == ENCODER_DIFF_CCW) {
-        if (select_LevelMenu.dec()) Move_Highlight(-1, select_LevelMenu.now);
-    }
-    else if (encoder_diffState == ENCODER_DIFF_ENTER) {
-        switch (select_LevelMenu.now) {
-            case 0: //Back
-              select_LevelMenu.set(1);
-              Goto_MainMenu();
-              break;
-            case 1: //Init mesh
-                select_LevelMenu.set(2);
-                SERIAL_ECHOLN("Run G28, G29 P1, G29 P3, G29 A");
-                break;
-            case 2: //Edit mesh
-                select_LevelMenu.set(3);
-                SERIAL_ECHOLN("Go to the edit menu");
-                break;
-            case 3: //Print test 1
-                select_LevelMenu.set(4);
-                SERIAL_ECHOLN("Print test 1");
-                break;
-            case 4: //Save mesh
-                select_LevelMenu.set(5);
-                SERIAL_ECHOLN("Run G29 S1");
-                break;
-            default:
-                break;
-        }
-    }
-    DWIN_UpdateLCD();
-}
-
 inline void Draw_Level_Menu() {
     Clear_Main_Window();
     Draw_Title("Level Menu");
@@ -1975,6 +1937,85 @@ inline void Draw_Level_Menu() {
     if (PVISI(3)) Draw_Menu_Line(PSCROL(3), 0, (char*)"Print test 1");
     if (PVISI(4)) Draw_Menu_Line(PSCROL(4), 0, (char*)"Save mesh");
     if (select_LevelMenu.now) Draw_Menu_Cursor(PSCROL(select_LevelMenu.now));
+}
+
+inline void Draw_Level_Menu_Edit_Mesh() {
+    Clear_Main_Window();
+    Draw_Title("Level Menu > Edit mesh");
+
+    const int16_t scroll = MROWS - index_prepare; // Scrolled-up lines
+    #define PSCROL(L) (scroll + (L))
+    #define PVISI(L)  WITHIN(PSCROL(L), 0, MROWS)
+
+    if (PVISI(0)) Draw_Back_First(select_LevelMenuEditMesh.now == 0);
+    if (select_LevelMenuEditMesh.now) Draw_Menu_Cursor(PSCROL(select_LevelMenuEditMesh.now));
+}
+
+
+/* Level Menu */
+void HMI_Level_Menu() {
+    ENCODER_DiffState encoder_diffState = get_encoder_state();
+    if (encoder_diffState == ENCODER_DIFF_NO) return;
+    if (encoder_diffState == ENCODER_DIFF_CW) {
+        if (select_LevelMenu.inc(5)) Move_Highlight(1, select_LevelMenu.now);
+    }
+    else if (encoder_diffState == ENCODER_DIFF_CCW) {
+        if (select_LevelMenu.dec()) Move_Highlight(-1, select_LevelMenu.now);
+    }
+    else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+        switch (select_LevelMenu.now) {
+            case 0: //Back
+              select_LevelMenu.set(select_LevelMenu.now+1);
+              Goto_MainMenu();
+              break;
+            case 1: //Init mesh
+                select_LevelMenu.set(select_LevelMenu.now+1);
+                SERIAL_ECHOLN("Run G28, G29 P1, G29 P3, G29 A");
+                break;
+            case 2: //Edit mesh
+                select_LevelMenu.set(select_LevelMenu.now+1);
+                checkkey = LevelMenuEditMesh;
+                select_LevelMenuEditMesh.reset();
+                Draw_Level_Menu_Edit_Mesh();
+                break;
+            case 3: //Print test 1
+                select_LevelMenu.set(select_LevelMenu.now+1);
+                SERIAL_ECHOLN("Print test 1");
+                break;
+            case 4: //Save mesh
+                select_LevelMenu.set(select_LevelMenu.now+1);
+                SERIAL_ECHOLN("Run G29 S1");
+                break;
+            default:
+                break;
+        }
+    }
+    DWIN_UpdateLCD();
+}
+
+/* Level Menu Edit Mesh */
+void HMI_Level_Menu_Edit_Mesh() {
+    ENCODER_DiffState encoder_diffState = get_encoder_state();
+    if (encoder_diffState == ENCODER_DIFF_NO) return;
+    if (encoder_diffState == ENCODER_DIFF_CW) {
+        if (select_LevelMenuEditMesh.inc(1)) Move_Highlight(1, select_LevelMenuEditMesh.now);
+    }
+    else if (encoder_diffState == ENCODER_DIFF_CCW) {
+        if (select_LevelMenuEditMesh.dec()) Move_Highlight(-1, select_LevelMenuEditMesh.now);
+    }
+    else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+        switch (select_LevelMenuEditMesh.now) {
+            case 0: //Back
+                select_LevelMenuEditMesh.set(select_LevelMenuEditMesh.now+1);
+                checkkey = LevelMenu;
+                select_LevelMenu.reset();
+                Draw_Level_Menu();
+                break;
+            default:
+                break;
+        }
+    }
+    DWIN_UpdateLCD();
 }
 
 #endif
@@ -3764,6 +3805,7 @@ void DWIN_HandleScreen() {
     case Step_value:      HMI_StepXYZE(); break;
     #ifdef AUTO_BED_LEVELING_UBL
       case LevelMenu:     HMI_Level_Menu(); break;
+      case LevelMenuEditMesh:     HMI_Level_Menu_Edit_Mesh(); break;
     #endif
     default: break;
   }
