@@ -85,6 +85,10 @@
   #include "../../../feature/powerloss.h"
 #endif
 
+#if HAS_LEVELING
+  #include "../../../feature/bedlevel/bedlevel.h"
+#endif
+
 #ifndef MACHINE_SIZE
   #define MACHINE_SIZE "220x220x250"
 #endif
@@ -311,8 +315,8 @@ void ICON_StartInfo(bool show) {
   }
 }
 
-void ICON_Leveling(bool show) {
-  if (show) {
+void ICON_Leveling() {
+  if (select_page.now == 3) {
     DWIN_ICON_Show(ICON, ICON_Leveling_1, 145, 246);
     DWIN_Draw_Rectangle(0, Color_White, 145, 246, 254, 345);
     if (HMI_IsChinese())
@@ -1142,7 +1146,7 @@ void Goto_MainMenu() {
   ICON_Print();
   ICON_Prepare();
   ICON_Control();
-  TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(select_page.now == 3);
+  ICON_Leveling();
 }
 
 inline ENCODER_DiffState get_encoder_state() {
@@ -1920,7 +1924,7 @@ void HMI_MainMenu() {
         case 0: ICON_Print(); break;
         case 1: ICON_Print(); ICON_Prepare(); break;
         case 2: ICON_Prepare(); ICON_Control(); break;
-        case 3: ICON_Control(); TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(1); break;
+        case 3: ICON_Control(); ICON_Leveling(); break;
       }
     }
   }
@@ -1929,8 +1933,8 @@ void HMI_MainMenu() {
       switch (select_page.now) {
         case 0: ICON_Print(); ICON_Prepare(); break;
         case 1: ICON_Prepare(); ICON_Control(); break;
-        case 2: ICON_Control(); TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(0); break;
-        case 3: TERN(HAS_ONESTEP_LEVELING, ICON_Leveling, ICON_StartInfo)(1); break;
+        case 2: ICON_Control(); ICON_Leveling(); break;
+        case 3: ICON_Leveling(); break;
       }
     }
   }
@@ -1956,12 +1960,18 @@ void HMI_MainMenu() {
         break;
 
       case 3: // Leveling or Info
-        #if HAS_ONESTEP_LEVELING
+        #ifdef AUTO_BED_LEVELING_UBL
+          checkkey = Info;
+          Draw_Info_Menu();
+          break;
+        #elif HAS_ONESTEP_LEVELING
           checkkey = Leveling;
           HMI_Leveling();
+          break;
         #else
           checkkey = Info;
           Draw_Info_Menu();
+          break;
         #endif
         break;
     }
@@ -2273,6 +2283,7 @@ void HMI_Prepare() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
 
+  SERIAL_ECHOLNPAIR("HMI_Prepare has been called, encoder_diffState value is : ", encoder_diffState);
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_prepare.inc(1 + PREPARE_CASE_TOTAL)) {
@@ -2280,6 +2291,7 @@ void HMI_Prepare() {
         index_prepare = select_prepare.now;
 
         // Scroll up and draw a blank bottom line
+        SERIAL_ECHOLNPAIR("Scroll up and draw a blank bottom line, index_prepare value is : ", index_prepare);
         Scroll_Menu(DWIN_SCROLL_UP);
         Draw_Menu_Icon(MROWS, ICON_Axis + select_prepare.now - 1);
 
