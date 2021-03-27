@@ -88,6 +88,10 @@ enum processID : uint8_t {
   #endif
   PrintSpeed,
 
+#ifdef AUTO_BED_LEVELING_UBL
+    LevelMenu,
+#endif
+
   // Window ID
   Print_window,
   Popup_Window

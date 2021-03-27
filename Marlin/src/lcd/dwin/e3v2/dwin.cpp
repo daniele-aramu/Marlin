@@ -177,6 +177,7 @@ select_t select_page{0}, select_file{0}, select_print{0}, select_prepare{0}
          , select_acc{0}
          , select_jerk{0}
          , select_step{0}
+         , select_LevelMenu{0}
          ;
 
 uint8_t index_file     = MROWS,
@@ -556,6 +557,9 @@ inline bool Apply_Encoder(const ENCODER_DiffState &encoder_diffState, auto &valr
 #define PREHEAT_CASE_FAN  (PREHEAT_CASE_BED + ENABLED(HAS_FAN))
 #define PREHEAT_CASE_SAVE (PREHEAT_CASE_FAN + ENABLED(EEPROM_SETTINGS))
 #define PREHEAT_CASE_TOTAL PREHEAT_CASE_SAVE
+
+#define LEVEL_MENU_CASE_MESH_EDIT  1
+#define LEVEL_MENU_CASE_PRINT_TEST_1  2
 
 //
 // Draw Menus
@@ -1913,6 +1917,68 @@ inline void Draw_Print_File_Menu() {
   Redraw_SD_List();
 }
 
+#ifdef AUTO_BED_LEVELING_UBL
+
+/* Level Menu */
+void HMI_Level_Menu() {
+    ENCODER_DiffState encoder_diffState = get_encoder_state();
+    if (encoder_diffState == ENCODER_DIFF_NO) return;
+    if (encoder_diffState == ENCODER_DIFF_CW) {
+        if (select_LevelMenu.inc(5)) Move_Highlight(1, select_LevelMenu.now);
+    }
+    else if (encoder_diffState == ENCODER_DIFF_CCW) {
+        if (select_LevelMenu.dec()) Move_Highlight(-1, select_LevelMenu.now);
+    }
+    else if (encoder_diffState == ENCODER_DIFF_ENTER) {
+        switch (select_LevelMenu.now) {
+            case 0: //Back
+              select_LevelMenu.set(1);
+              Goto_MainMenu();
+              break;
+            case 1: //Init mesh
+                select_LevelMenu.set(2);
+                SERIAL_ECHOLN("Run G28, G29 P1, G29 P3, G29 A");
+                break;
+            case 2: //Edit mesh
+                select_LevelMenu.set(3);
+                SERIAL_ECHOLN("Go to the edit menu");
+                break;
+            case 3: //Print test 1
+                select_LevelMenu.set(4);
+                SERIAL_ECHOLN("Print test 1");
+                break;
+            case 4: //Save mesh
+                select_LevelMenu.set(5);
+                SERIAL_ECHOLN("Run G29 S1");
+                break;
+            default:
+                break;
+        }
+    }
+    DWIN_UpdateLCD();
+}
+
+inline void Draw_Level_Menu() {
+    Clear_Main_Window();
+    Draw_Title("Level Menu");
+
+    const int16_t scroll = MROWS - index_prepare; // Scrolled-up lines
+    #define PSCROL(L) (scroll + (L))
+    #define PVISI(L)  WITHIN(PSCROL(L), 0, MROWS)
+
+    if (PVISI(0)) Draw_Back_First(select_prepare.now == 0);
+    if (PVISI(1)) Draw_Menu_Line(PSCROL(1), 0, (char*)"Init mesh");
+    if (PVISI(2)) {
+        Draw_Menu_Line(PSCROL(2), 0, (char*)"Edit mesh");
+        Draw_More_Icon(PSCROL(2));
+    }
+    if (PVISI(3)) Draw_Menu_Line(PSCROL(3), 0, (char*)"Print test 1");
+    if (PVISI(4)) Draw_Menu_Line(PSCROL(4), 0, (char*)"Save mesh");
+    if (select_LevelMenu.now) Draw_Menu_Cursor(PSCROL(select_LevelMenu.now));
+}
+
+#endif
+
 /* Main Process */
 void HMI_MainMenu() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
@@ -1961,8 +2027,9 @@ void HMI_MainMenu() {
 
       case 3: // Leveling or Info
         #ifdef AUTO_BED_LEVELING_UBL
-          checkkey = Info;
-          Draw_Info_Menu();
+          checkkey = LevelMenu;
+          select_LevelMenu.reset();
+          Draw_Level_Menu();
           break;
         #elif HAS_ONESTEP_LEVELING
           checkkey = Leveling;
@@ -2283,7 +2350,6 @@ void HMI_Prepare() {
   ENCODER_DiffState encoder_diffState = get_encoder_state();
   if (encoder_diffState == ENCODER_DIFF_NO) return;
 
-  SERIAL_ECHOLNPAIR("HMI_Prepare has been called, encoder_diffState value is : ", encoder_diffState);
   // Avoid flicker by updating only the previous menu
   if (encoder_diffState == ENCODER_DIFF_CW) {
     if (select_prepare.inc(1 + PREPARE_CASE_TOTAL)) {
@@ -2291,7 +2357,6 @@ void HMI_Prepare() {
         index_prepare = select_prepare.now;
 
         // Scroll up and draw a blank bottom line
-        SERIAL_ECHOLNPAIR("Scroll up and draw a blank bottom line, index_prepare value is : ", index_prepare);
         Scroll_Menu(DWIN_SCROLL_UP);
         Draw_Menu_Icon(MROWS, ICON_Axis + select_prepare.now - 1);
 
@@ -3697,6 +3762,9 @@ void DWIN_HandleScreen() {
     case MaxAcceleration_value: HMI_MaxAccelerationXYZE(); break;
     case MaxJerk_value:   HMI_MaxJerkXYZE(); break;
     case Step_value:      HMI_StepXYZE(); break;
+    #ifdef AUTO_BED_LEVELING_UBL
+      case LevelMenu:     HMI_Level_Menu(); break;
+    #endif
     default: break;
   }
 }
