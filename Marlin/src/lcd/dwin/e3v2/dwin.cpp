@@ -1939,7 +1939,65 @@ inline void Draw_Level_Menu() {
     if (select_LevelMenu.now) Draw_Menu_Cursor(PSCROL(select_LevelMenu.now));
 }
 
-inline void Draw_Level_Menu_Edit_Mesh() {
+#define BACK_LINE_HEIGHT 100
+#define TOTAL_SQUARE_HEIGHT 220
+#define LINE_MARGIN 20
+//#define TOTAL_SQUARE_HEIGHT DWIN_WIDTH-10
+#define LCD_MARGIN (DWIN_WIDTH - TOTAL_SQUARE_HEIGHT) / 2
+#define SLOT_SIZE TOTAL_SQUARE_HEIGHT / (( 2*GRID_MAX_POINTS_X)-1)
+
+#define OFFSET_VALUE_START_X 200
+#define OFFSET_VALUE_END_X DWIN_WIDTH
+#define OFFSET_VALUE_START_Y BACK_LINE_HEIGHT+TOTAL_SQUARE_HEIGHT+LINE_MARGIN
+#define OFFSET_VALUE_END_Y OFFSET_VALUE_START_Y + 20
+
+inline void Draw_Regular_Mesh_Point(const uint8_t selectedIndex) {
+    int selectedIndexRow = (selectedIndex -1) / GRID_MAX_POINTS_Y;
+    int selectedIndexColumn = (selectedIndex -1) % GRID_MAX_POINTS_X;
+    int y = (selectedIndexRow * 2 * SLOT_SIZE) + 100;
+    int x = LCD_MARGIN + (selectedIndexColumn * 2 * SLOT_SIZE);
+    DWIN_Draw_Rectangle(1, 0x34B8,  x,  y,  x + SLOT_SIZE, y + SLOT_SIZE);
+}
+
+inline void Draw_Highlighted_Mesh_Point(const uint8_t selectedIndex) {
+    int selectedIndexRow = (selectedIndex -1) / GRID_MAX_POINTS_Y;
+    int selectedIndexColumn = (selectedIndex -1) % GRID_MAX_POINTS_X;
+    int y = (selectedIndexRow * 2 * SLOT_SIZE) + 100;
+    int x = LCD_MARGIN + (selectedIndexColumn * 2 * SLOT_SIZE);
+    DWIN_Draw_Rectangle(1, Color_White,  x,  y,  x + SLOT_SIZE, y + SLOT_SIZE);
+    int ublJ = GRID_MAX_POINTS_Y - selectedIndexRow -1;
+    int ublI = selectedIndexColumn ;
+    const float f = ubl.z_values[ublI][ublJ];
+    DWIN_Draw_Signed_Float(font10x20, Color_Bg_Black, 1, 3, OFFSET_VALUE_START_X, OFFSET_VALUE_START_Y, f*1000);
+}
+
+inline void Clean_Offset_Value() {
+    DWIN_Draw_Rectangle(1, Color_Bg_Black,  OFFSET_VALUE_START_X, OFFSET_VALUE_START_Y,  OFFSET_VALUE_END_X, OFFSET_VALUE_END_Y);
+}
+
+inline void Move_Highlighted_CW(const uint8_t selectedIndex) {
+    Clean_Offset_Value();
+    if(selectedIndex>1){
+        Draw_Regular_Mesh_Point(selectedIndex-1);
+    }
+    Draw_Highlighted_Mesh_Point(selectedIndex);
+}
+
+inline void Move_Highlighted_CCW(const uint8_t selectedIndex) {
+    Clean_Offset_Value();
+    Draw_Regular_Mesh_Point(selectedIndex+1);
+    Draw_Highlighted_Mesh_Point(selectedIndex);
+}
+
+inline void Select_Mesh_Point(const uint8_t selectedIndex) {
+    int selectedIndexRow = (selectedIndex -1) / GRID_MAX_POINTS_Y;
+    int selectedIndexColumn = (selectedIndex -1) % GRID_MAX_POINTS_X;
+    int y = (selectedIndexRow * 2 * SLOT_SIZE) + 100;
+    int x = LCD_MARGIN + (selectedIndexColumn * 2 * SLOT_SIZE);
+    DWIN_Draw_Rectangle(1, Rectangle_Color,  x,  y,  x + SLOT_SIZE, y + SLOT_SIZE);
+}
+
+inline void Draw_Level_Menu_Edit_Mesh(const uint8_t selectedIndex = 0, const bool highlighted = false, const bool selected = false) {
     Clear_Main_Window();
     Draw_Title("Level Menu > Edit mesh");
 
@@ -1948,7 +2006,17 @@ inline void Draw_Level_Menu_Edit_Mesh() {
     #define PVISI(L)  WITHIN(PSCROL(L), 0, MROWS)
 
     if (PVISI(0)) Draw_Back_First(select_LevelMenuEditMesh.now == 0);
-    if (select_LevelMenuEditMesh.now) Draw_Menu_Cursor(PSCROL(select_LevelMenuEditMesh.now));
+
+    DWIN_Draw_String(true, true, font10x20, Color_White, Color_Bg_Black,  10, BACK_LINE_HEIGHT+TOTAL_SQUARE_HEIGHT+LINE_MARGIN,  (char*)"Offset :");
+    DWIN_Draw_String(true, true, font10x20, Color_White, Color_Bg_Black,  200, BACK_LINE_HEIGHT+TOTAL_SQUARE_HEIGHT+LINE_MARGIN,  (char*)"-.---");
+
+    for( int row = 0; row < GRID_MAX_POINTS_Y; row++ ) {
+        int y = (row * 2 * SLOT_SIZE) + 100;
+        for( int column = 0; column < GRID_MAX_POINTS_X; column++ ) {
+            int x = LCD_MARGIN + (column * 2 * SLOT_SIZE);
+            DWIN_Draw_Rectangle(1, 0x34B8,  x,  y,  x + SLOT_SIZE, y + SLOT_SIZE);
+        }
+    }
 }
 
 
@@ -1973,9 +2041,10 @@ void HMI_Level_Menu() {
                 SERIAL_ECHOLN("Run G28, G29 P1, G29 P3, G29 A");
                 break;
             case 2: //Edit mesh
-                select_LevelMenu.set(select_LevelMenu.now+1);
+                select_LevelMenuEditMesh.set(1);
                 checkkey = LevelMenuEditMesh;
                 select_LevelMenuEditMesh.reset();
+                queue.inject_P(PSTR("G29 L1\nG29 A"));
                 Draw_Level_Menu_Edit_Mesh();
                 break;
             case 3: //Print test 1
@@ -1998,20 +2067,39 @@ void HMI_Level_Menu_Edit_Mesh() {
     ENCODER_DiffState encoder_diffState = get_encoder_state();
     if (encoder_diffState == ENCODER_DIFF_NO) return;
     if (encoder_diffState == ENCODER_DIFF_CW) {
-        if (select_LevelMenuEditMesh.inc(1)) Move_Highlight(1, select_LevelMenuEditMesh.now);
+        if (select_LevelMenuEditMesh.inc(1+(GRID_MAX_POINTS_X*GRID_MAX_POINTS_Y))){
+            if(select_LevelMenuEditMesh.now==0){
+                Draw_Menu_Cursor(select_LevelMenuEditMesh.now);
+            }
+            else{
+                Erase_Menu_Cursor(0);
+                Move_Highlighted_CW(select_LevelMenuEditMesh.now);
+            }
+        }
     }
     else if (encoder_diffState == ENCODER_DIFF_CCW) {
-        if (select_LevelMenuEditMesh.dec()) Move_Highlight(-1, select_LevelMenuEditMesh.now);
+        if (select_LevelMenuEditMesh.dec()){
+            if(select_LevelMenuEditMesh.now==0){
+                Draw_Menu_Cursor(select_LevelMenuEditMesh.now);
+                Draw_Regular_Mesh_Point(1);
+            }
+            else{
+                Erase_Menu_Cursor(0);
+                Move_Highlighted_CCW(select_LevelMenuEditMesh.now);
+            }
+        }
     }
     else if (encoder_diffState == ENCODER_DIFF_ENTER) {
         switch (select_LevelMenuEditMesh.now) {
             case 0: //Back
-                select_LevelMenuEditMesh.set(select_LevelMenuEditMesh.now+1);
+                select_LevelMenuEditMesh.reset();
                 checkkey = LevelMenu;
                 select_LevelMenu.reset();
                 Draw_Level_Menu();
+                DWIN_UpdateLCD();
                 break;
             default:
+                Select_Mesh_Point(select_LevelMenuEditMesh.now);
                 break;
         }
     }
